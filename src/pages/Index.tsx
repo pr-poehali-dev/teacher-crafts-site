@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,22 +18,7 @@ const Index = () => {
     workshop: '',
     message: ''
   });
-
-  const scrollToSection = (id: string) => {
-    setActiveSection(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast({
-      title: "Заявка отправлена!",
-      description: "Мы свяжемся с вами в ближайшее время.",
-    });
-    setFormData({ name: '', email: '', phone: '', workshop: '', message: '' });
-  };
-
-  const projects = [
+  const [projects, setProjects] = useState([
     {
       title: 'Скворечник ручной работы',
       category: 'Деревообработка',
@@ -52,7 +37,79 @@ const Index = () => {
       image: 'https://cdn.poehali.dev/projects/c78a7030-c3b7-495c-baee-9aa7d56964cb/files/ba432c4a-746a-4bc1-857e-5c71d1ce6250.jpg',
       description: 'Проект с резьбой и инкрустацией'
     }
-  ];
+  ]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
+
+  const scrollToSection = (id: string) => {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast({
+      title: "Заявка отправлена!",
+      description: "Мы свяжемся с вами в ближайшее время.",
+    });
+    setFormData({ name: '', email: '', phone: '', workshop: '', message: '' });
+  };
+
+  const handleImageUpload = async (index: number, file: File) => {
+    if (!file || !file.type.startsWith('image/')) {
+      toast({
+        title: "Ошибка",
+        description: "Пожалуйста, выберите изображение",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      
+      reader.onload = async () => {
+        const base64Image = reader.result as string;
+        
+        const response = await fetch('https://functions.poehali.dev/1960134d-fe31-4838-a658-fafce30fe0c6', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            image: base64Image,
+            fileName: file.name
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Ошибка загрузки');
+        }
+
+        const data = await response.json();
+        
+        const updatedProjects = [...projects];
+        updatedProjects[index].image = data.url;
+        setProjects(updatedProjects);
+
+        toast({
+          title: "Успешно!",
+          description: "Изображение загружено",
+        });
+      };
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить изображение",
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const workshops = [
     {
@@ -240,6 +297,27 @@ const Index = () => {
                   <Badge className="absolute top-4 right-4 bg-white/90 text-foreground">
                     {project.category}
                   </Badge>
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                    <Button
+                      size="lg"
+                      onClick={() => fileInputRefs.current[index]?.click()}
+                      disabled={uploading}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      <Icon name="Upload" className="mr-2" size={20} />
+                      {uploading ? 'Загрузка...' : 'Изменить фото'}
+                    </Button>
+                    <input
+                      ref={(el) => (fileInputRefs.current[index] = el)}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(index, file);
+                      }}
+                    />
+                  </div>
                 </div>
                 <CardHeader>
                   <CardTitle className="text-2xl">{project.title}</CardTitle>
